@@ -41,17 +41,23 @@ def load_database():
         try:
             member_df = pd.read_excel(DB_FILE, sheet_name='Members')
             log_df = pd.read_excel(DB_FILE, sheet_name='CheckIns')
-            # Ensure proper types
+            
             if not member_df.empty:
                 member_df['ID'] = member_df['ID'].astype(int)
                 member_df['Join Date'] = pd.to_datetime(member_df['Join Date']).dt.date
                 member_df['Expiry Date'] = pd.to_datetime(member_df['Expiry Date']).dt.date
+            
             if not log_df.empty:
-                log_df['CheckIn Time_dt'] = pd.to_datetime(log_df['CheckIn Time'].str.replace(' IST',''))
+                if 'CheckIn Time_dt' not in log_df.columns:
+                    log_df['CheckIn Time_dt'] = pd.to_datetime(log_df['CheckIn Time'].str.replace(' IST',''))
+            else:
+                log_df['CheckIn Time_dt'] = pd.Series(dtype='datetime64[ns]')
+            
             return member_df, log_df
         except:
             pass
-    # Empty DataFrames
+
+    # If file missing or error, create empty
     member_df = pd.DataFrame(columns=['ID','Name','Phone','Membership Type','Join Date','Expiry Date'])
     log_df = pd.DataFrame(columns=['ID','Name','CheckIn Time','Staff User','CheckIn Time_dt'])
     save_database(member_df, log_df)
@@ -125,35 +131,45 @@ def sidebar():
 def check_in_page(member_df, log_df):
     st.header("Member Check-In")
     st.write("Current IST:", get_ist_time().strftime("%Y-%m-%d %H:%M:%S"))
-    member_df['ID'] = member_df['ID'].astype(int) if not member_df.empty else pd.Series(dtype=int)
+    
     member_id = int(st.number_input("Member ID", min_value=1, step=1, key="checkin_id"))
+    
     if st.button("Record Entry", key="checkin_button"):
-        member = member_df[member_df['ID'] == member_id]
+        member = member_df[member_df['ID']==member_id]
         if member.empty:
             st.error("Member not found")
         else:
             name = member['Name'].iloc[0]
             expiry = member['Expiry Date'].iloc[0]
             today = get_ist_time().date()
+            
             if expiry < today:
-                st.error(f"{name} membership expired on {expiry}")
+                st.error(f"{name}'s membership expired on {expiry}")
             else:
-                time_str = get_ist_time().strftime("%Y-%m-%d %H:%M:%S IST")
+                time_now = get_ist_time()
+                time_str = time_now.strftime("%Y-%m-%d %H:%M:%S IST")
+                
                 new_entry = pd.DataFrame([{
                     'ID': member_id,
                     'Name': name,
                     'CheckIn Time': time_str,
                     'Staff User': st.session_state['user'],
-                    'CheckIn Time_dt': get_ist_time()
+                    'CheckIn Time_dt': time_now
                 }])
+                
                 log_df = pd.concat([log_df, new_entry], ignore_index=True)
                 st.session_state['log_df'] = log_df
                 save_database(member_df, log_df)
+                
                 st.success(f"Check-in recorded for {name} at {time_str}")
-
+    
     st.subheader("Recent Check-ins")
     if not log_df.empty:
-        st.dataframe(log_df.sort_values('CheckIn Time_dt', ascending=False).head(10)[['ID','Name','CheckIn Time','Staff User']])
+        if 'CheckIn Time_dt' not in log_df.columns:
+            log_df['CheckIn Time_dt'] = pd.to_datetime(log_df['CheckIn Time'].str.replace(' IST',''))
+        st.dataframe(
+            log_df.sort_values('CheckIn Time_dt', ascending=False).head(10)[['ID','Name','CheckIn Time','Staff User']]
+        )
     else:
         st.info("No check-ins yet.")
 
