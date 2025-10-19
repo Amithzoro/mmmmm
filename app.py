@@ -157,37 +157,41 @@ def check_in(member_df, log_df):
 
 def member_management(member_df):
     st.header("Member Management")
-    if st.session_state['role'] == 'owner':
-        with st.expander("Add Member"):
-            next_id = int(member_df['ID'].max()+1) if not member_df.empty else 1
-            name = st.text_input("Full Name")
-            phone = st.text_input("Phone")
-            mtype = st.selectbox("Membership Type", ['Monthly','Quarterly','Annual','Trial'])
-            join = st.date_input("Join Date", get_ist_time().date())
-            expiry = st.date_input("Expiry Date", join + datetime.timedelta(days=30))
-            if st.button("Add Member"):
-                if not name or not phone:
-                    st.error("All fields required")
-                elif expiry <= join:
-                    st.error("Expiry after Join Date")
-                else:
-                    new_member = pd.DataFrame([{
-                        'ID': next_id,
-                        'Name': name,
-                        'Phone': phone,
-                        'Membership Type': mtype,
-                        'Join Date': join,
-                        'Expiry Date': expiry
-                    }])
-                    member_df = pd.concat([member_df, new_member], ignore_index=True)
-                    st.session_state['member_df'] = member_df
-                    save_database(member_df, st.session_state.get('log_df',pd.DataFrame()))
-                    st.success(f"Added {name} (ID:{next_id})")
+    
+    # Both owner and staff can add members
+    with st.expander("➕ Add Member"):
+        next_id = int(member_df['ID'].max() + 1) if not member_df.empty else 1
+        name = st.text_input("Full Name")
+        phone = st.text_input("Phone Number")
+        mtype = st.selectbox("Membership Type", ['Monthly', 'Quarterly', 'Annual', 'Trial'])
+        join = st.date_input("Join Date", get_ist_time().date())
+        expiry = st.date_input("Expiry Date", join + datetime.timedelta(days=30))
+        
+        if st.button("Add Member"):
+            if not name or not phone:
+                st.error("All fields are required")
+            elif expiry <= join:
+                st.error("Expiry Date must be after Join Date")
+            else:
+                new_member = pd.DataFrame([{
+                    'ID': next_id,
+                    'Name': name,
+                    'Phone': phone,
+                    'Membership Type': mtype,
+                    'Join Date': join,
+                    'Expiry Date': expiry
+                }])
+                member_df = pd.concat([member_df, new_member], ignore_index=True)
+                st.session_state['member_df'] = member_df
+                save_database(member_df, st.session_state.get('log_df', pd.DataFrame()))
+                st.success(f"Member '{name}' added with ID: {next_id}")
+    
     st.subheader("All Members")
     if not member_df.empty:
         st.dataframe(member_df.sort_values('ID'))
     else:
         st.info("No members yet.")
+    
     return member_df
 
 def reminders(member_df):
@@ -195,21 +199,24 @@ def reminders(member_df):
     if st.session_state['role'] != 'owner':
         st.warning("Only owner can view reminders")
         return
+
     today = get_ist_time().date()
     df = member_df.copy()
     df['Days Left'] = (df['Expiry Date'] - today).apply(lambda x: x.days)
-    st.subheader("Expired")
+
+    st.subheader("Expired Memberships")
     expired = df[df['Days Left'] < 0]
     if not expired.empty:
-        st.dataframe(expired.style.applymap(lambda x: 'color:red', subset=['Expiry Date']))
+        st.dataframe(expired)
     else:
-        st.info("No expired memberships")
-    st.subheader("Expiring Soon (≤30 days)")
-    soon = df[(df['Days Left']>=0) & (df['Days Left']<=30)]
+        st.info("No expired memberships!")
+
+    st.subheader("Expiring Within 30 Days")
+    soon = df[(df['Days Left'] >= 0) & (df['Days Left'] <= 30)]
     if not soon.empty:
         st.dataframe(soon)
     else:
-        st.info("No members expiring in next 30 days")
+        st.info("No memberships expiring in next 30 days.")
 
 # --- Main App ---
 if 'logged_in' not in st.session_state:
@@ -221,12 +228,18 @@ if st.session_state['logged_in']:
     sidebar()
     if 'member_df' not in st.session_state or 'log_df' not in st.session_state:
         st.session_state['member_df'], st.session_state['log_df'] = load_database()
-    page = st.sidebar.radio("Go to", ["Check-in","Members"] + (["Reminders"] if st.session_state['role']=='owner' else []))
-    if page=="Check-in":
-        check_in(st.session_state['member_df'], st.session_state['log_df'])
-    elif page=="Members":
-        st.session_state['member_df'] = member_management(st.session_state['member_df'])
-    elif page=="Reminders":
-        reminders(st.session_state['member_df'])
+    
+    pages = {
+        "Check-In": check_in,
+        "Member Management": member_management
+    }
+    if st.session_state['role'] == 'owner':
+        pages["Membership Reminders"] = reminders
+
+    choice = st.sidebar.radio("Navigate", list(pages.keys()))
+    if choice == "Check-In":
+        pages[choice](st.session_state['member_df'], st.session_state['log_df'])
+    else:
+        st.session_state['member_df'] = pages[choice](st.session_state['member_df'])
 else:
     login_page()
