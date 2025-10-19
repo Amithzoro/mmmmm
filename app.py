@@ -54,7 +54,6 @@ def load_database():
             return member_df, log_df
         except:
             pass
-    # If file missing or error, create empty DataFrames
     member_df = pd.DataFrame(columns=['ID','Name','Phone','Membership Type','Join Date','Expiry Date'])
     log_df = pd.DataFrame(columns=['ID','Name','CheckIn Time','Staff User','CheckIn Time_dt'])
     save_database(member_df, log_df)
@@ -160,7 +159,11 @@ def member_management(member_df):
     
     # Both owner and staff can add members
     with st.expander("➕ Add Member"):
-        next_id = int(member_df['ID'].max() + 1) if not member_df.empty else 1
+        if 'ID' not in member_df or member_df['ID'].dropna().empty:
+            next_id = 1
+        else:
+            next_id = int(member_df['ID'].max()) + 1
+
         name = st.text_input("Full Name")
         phone = st.text_input("Phone Number")
         mtype = st.selectbox("Membership Type", ['Monthly', 'Quarterly', 'Annual', 'Trial'])
