@@ -224,7 +224,7 @@ def reminders(member_df):
     else:
         st.info("No memberships expiring in next 30 days.")
 
-# --- Main App ---
+
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'show_register' not in st.session_state:
