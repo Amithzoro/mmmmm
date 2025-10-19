@@ -40,20 +40,18 @@ def load_database():
     if os.path.exists(DB_FILE):
         try:
             member_df = pd.read_excel(DB_FILE, sheet_name='Members')
+            log_df = pd.read_excel(DB_FILE, sheet_name='CheckIns')
+            # Ensure proper types
             if not member_df.empty:
                 member_df['ID'] = member_df['ID'].astype(int)
                 member_df['Join Date'] = pd.to_datetime(member_df['Join Date']).dt.date
                 member_df['Expiry Date'] = pd.to_datetime(member_df['Expiry Date']).dt.date
-            else:
-                member_df = pd.DataFrame(columns=['ID','Name','Phone','Membership Type','Join Date','Expiry Date'])
-            log_df = pd.read_excel(DB_FILE, sheet_name='CheckIns')
             if not log_df.empty:
                 log_df['CheckIn Time_dt'] = pd.to_datetime(log_df['CheckIn Time'].str.replace(' IST',''))
-            else:
-                log_df = pd.DataFrame(columns=['ID','Name','CheckIn Time','Staff User','CheckIn Time_dt'])
             return member_df, log_df
         except:
             pass
+    # Empty DataFrames
     member_df = pd.DataFrame(columns=['ID','Name','Phone','Membership Type','Join Date','Expiry Date'])
     log_df = pd.DataFrame(columns=['ID','Name','CheckIn Time','Staff User','CheckIn Time_dt'])
     save_database(member_df, log_df)
@@ -62,7 +60,9 @@ def load_database():
 def save_database(member_df, log_df):
     with pd.ExcelWriter(DB_FILE, engine='openpyxl') as writer:
         member_df.to_excel(writer, sheet_name='Members', index=False)
-        log_df.drop(columns=['CheckIn Time_dt'], errors='ignore').to_excel(writer, sheet_name='CheckIns', index=False)
+        if 'CheckIn Time_dt' in log_df.columns:
+            log_df.drop(columns=['CheckIn Time_dt'], inplace=True)
+        log_df.to_excel(writer, sheet_name='CheckIns', index=False)
 
 # --- Staff Registration/Login ---
 def staff_registration():
@@ -70,7 +70,6 @@ def staff_registration():
     username = st.text_input("Username", key="reg_username")
     password = st.text_input("Password", type="password", key="reg_password")
     confirm = st.text_input("Confirm Password", type="password", key="reg_confirm")
-
     if st.button("Register Staff", key="register_button"):
         if not username or not password:
             st.error("All fields required")
@@ -123,15 +122,11 @@ def sidebar():
         st.rerun()
 
 # --- Pages ---
-def check_in(member_df, log_df):
+def check_in_page(member_df, log_df):
     st.header("Member Check-In")
     st.write("Current IST:", get_ist_time().strftime("%Y-%m-%d %H:%M:%S"))
-
-    if not member_df.empty:
-        member_df['ID'] = member_df['ID'].astype(int)
-
+    member_df['ID'] = member_df['ID'].astype(int) if not member_df.empty else pd.Series(dtype=int)
     member_id = int(st.number_input("Member ID", min_value=1, step=1, key="checkin_id"))
-
     if st.button("Record Entry", key="checkin_button"):
         member = member_df[member_df['ID'] == member_id]
         if member.empty:
@@ -162,23 +157,20 @@ def check_in(member_df, log_df):
     else:
         st.info("No check-ins yet.")
 
-def member_management(member_df):
+def member_management_page(member_df, log_df=None):
     st.header("Member Management")
-    
     with st.expander("➕ Add Member"):
         next_id = int(member_df['ID'].max()) + 1 if not member_df.empty else 1
-
         name = st.text_input("Full Name", key="member_name")
         phone = st.text_input("Phone Number", key="member_phone")
         mtype = st.selectbox("Membership Type", ['Monthly', 'Quarterly', 'Annual', 'Trial'], key="member_type")
         join = st.date_input("Join Date", get_ist_time().date(), key="member_join")
         expiry = st.date_input("Expiry Date", join + datetime.timedelta(days=30), key="member_expiry")
-        
         if st.button("Add Member", key="add_member_button"):
             if not name or not phone:
-                st.error("All fields are required")
+                st.error("All fields required")
             elif expiry <= join:
-                st.error("Expiry Date must be after Join Date")
+                st.error("Expiry must be after Join")
             else:
                 new_member = pd.DataFrame([{
                     'ID': next_id,
@@ -190,42 +182,17 @@ def member_management(member_df):
                 }])
                 member_df = pd.concat([member_df, new_member], ignore_index=True)
                 st.session_state['member_df'] = member_df
-                save_database(member_df, st.session_state.get('log_df', pd.DataFrame()))
+                save_database(member_df, log_df if log_df is not None else pd.DataFrame())
                 st.success(f"Member '{name}' added with ID: {next_id}")
-    
+
     st.subheader("All Members")
     if not member_df.empty:
         st.dataframe(member_df.sort_values('ID'))
     else:
         st.info("No members yet.")
-    
     return member_df
 
-def reminders(member_df):
-    st.header("Membership Reminders")
-    if st.session_state['role'] != 'owner':
-        st.warning("Only owner can view reminders")
-        return
-
-    today = get_ist_time().date()
-    df = member_df.copy()
-    df['Days Left'] = (df['Expiry Date'] - today).apply(lambda x: x.days)
-
-    st.subheader("Expired Memberships")
-    expired = df[df['Days Left'] < 0]
-    if not expired.empty:
-        st.dataframe(expired)
-    else:
-        st.info("No expired memberships!")
-
-    st.subheader("Expiring Within 30 Days")
-    soon = df[(df['Days Left'] >= 0) & (df['Days Left'] <= 30)]
-    if not soon.empty:
-        st.dataframe(soon)
-    else:
-        st.info("No memberships expiring in next 30 days.")
-
-# --- Main ---
+# --- Main App ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'show_register' not in st.session_state:
@@ -235,18 +202,16 @@ if st.session_state['logged_in']:
     sidebar()
     if 'member_df' not in st.session_state or 'log_df' not in st.session_state:
         st.session_state['member_df'], st.session_state['log_df'] = load_database()
-    
+
     pages = {
-        "Check-In": check_in,
-        "Member Management": member_management
+        "Check-In": check_in_page,
+        "Member Management": member_management_page
     }
-    if st.session_state['role'] == 'owner':
-        pages["Membership Reminders"] = reminders
 
     choice = st.sidebar.radio("Navigate", list(pages.keys()))
     if choice == "Check-In":
         pages[choice](st.session_state['member_df'], st.session_state['log_df'])
     else:
-        st.session_state['member_df'] = pages[choice](st.session_state['member_df'])
+        st.session_state['member_df'] = pages[choice](st.session_state['member_df'], st.session_state['log_df'])
 else:
     login_page()
