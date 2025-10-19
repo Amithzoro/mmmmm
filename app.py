@@ -41,9 +41,9 @@ def load_database():
         try:
             member_df = pd.read_excel(DB_FILE, sheet_name='Members')
             if not member_df.empty:
+                member_df['ID'] = member_df['ID'].astype(int)
                 member_df['Join Date'] = pd.to_datetime(member_df['Join Date']).dt.date
                 member_df['Expiry Date'] = pd.to_datetime(member_df['Expiry Date']).dt.date
-                member_df['ID'] = member_df['ID'].astype(int)
             else:
                 member_df = pd.DataFrame(columns=['ID','Name','Phone','Membership Type','Join Date','Expiry Date'])
             log_df = pd.read_excel(DB_FILE, sheet_name='CheckIns')
@@ -86,7 +86,7 @@ def staff_registration():
                 creds[username] = hash_password(password)
                 save_staff_credentials(creds)
                 st.success(f"Staff '{username}' registered!")
-                st.session_state['show_register'] = False  # hide form after registration
+                st.session_state['show_register'] = False
 
 def login_page():
     st.title("Gym Membership System")
@@ -127,9 +127,13 @@ def check_in(member_df, log_df):
     st.header("Member Check-In")
     st.write("Current IST:", get_ist_time().strftime("%Y-%m-%d %H:%M:%S"))
 
-    member_id = st.number_input("Member ID", min_value=1, step=1, key="checkin_id")
+    if not member_df.empty:
+        member_df['ID'] = member_df['ID'].astype(int)
+
+    member_id = int(st.number_input("Member ID", min_value=1, step=1, key="checkin_id"))
+
     if st.button("Record Entry", key="checkin_button"):
-        member = member_df[member_df['ID']==member_id]
+        member = member_df[member_df['ID'] == member_id]
         if member.empty:
             st.error("Member not found")
         else:
@@ -162,10 +166,7 @@ def member_management(member_df):
     st.header("Member Management")
     
     with st.expander("➕ Add Member"):
-        if 'ID' not in member_df or member_df['ID'].dropna().empty:
-            next_id = 1
-        else:
-            next_id = int(member_df['ID'].max()) + 1
+        next_id = int(member_df['ID'].max()) + 1 if not member_df.empty else 1
 
         name = st.text_input("Full Name", key="member_name")
         phone = st.text_input("Phone Number", key="member_phone")
@@ -224,7 +225,7 @@ def reminders(member_df):
     else:
         st.info("No memberships expiring in next 30 days.")
 
-
+# --- Main ---
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'show_register' not in st.session_state:
