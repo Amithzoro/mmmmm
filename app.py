@@ -124,6 +124,7 @@ def sidebar():
 def check_in(member_df, log_df):
     st.header("Member Check-In")
     st.write("Current IST:", get_ist_time().strftime("%Y-%m-%d %H:%M:%S"))
+
     member_id = st.number_input("Member ID", min_value=1, step=1)
     if st.button("Record Entry"):
         member = member_df[member_df['ID']==member_id]
@@ -148,6 +149,7 @@ def check_in(member_df, log_df):
                 st.session_state['log_df'] = log_df
                 save_database(member_df, log_df)
                 st.success(f"Check-in recorded for {name} at {time_str}")
+
     st.subheader("Recent Check-ins")
     if not log_df.empty:
         st.dataframe(log_df.sort_values('CheckIn Time_dt', ascending=False).head(10)[['ID','Name','CheckIn Time','Staff User']])
@@ -157,7 +159,6 @@ def check_in(member_df, log_df):
 def member_management(member_df):
     st.header("Member Management")
     
-    # Both owner and staff can add members
     with st.expander("➕ Add Member"):
         if 'ID' not in member_df or member_df['ID'].dropna().empty:
             next_id = 1
