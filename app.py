@@ -67,10 +67,11 @@ def save_database(member_df, log_df):
 # --- Staff Registration/Login ---
 def staff_registration():
     st.subheader("Staff Registration")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-    confirm = st.text_input("Confirm Password", type="password")
-    if st.button("Register Staff"):
+    username = st.text_input("Username", key="reg_username")
+    password = st.text_input("Password", type="password", key="reg_password")
+    confirm = st.text_input("Confirm Password", type="password", key="reg_confirm")
+
+    if st.button("Register Staff", key="register_button"):
         if not username or not password:
             st.error("All fields required")
         elif password != confirm:
@@ -85,13 +86,14 @@ def staff_registration():
                 creds[username] = hash_password(password)
                 save_staff_credentials(creds)
                 st.success(f"Staff '{username}' registered!")
+                st.session_state['show_register'] = False  # hide form after registration
 
 def login_page():
     st.title("Gym Membership System")
     st.subheader("Login")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-    if st.button("Login"):
+    username = st.text_input("Username", key="login_username")
+    password = st.text_input("Password", type="password", key="login_password")
+    if st.button("Login", key="login_button"):
         if username == OWNER_USERNAME and hash_password(password) == OWNER_PASSWORD_HASH:
             st.session_state['logged_in'] = True
             st.session_state['role'] = 'owner'
@@ -107,7 +109,7 @@ def login_page():
             else:
                 st.error("Invalid username/password")
     st.markdown("---")
-    if st.button("Register Staff"):
+    if st.button("Register Staff", key="show_reg_button"):
         st.session_state['show_register'] = True
     if st.session_state.get('show_register'):
         staff_registration()
@@ -116,7 +118,7 @@ def login_page():
 def sidebar():
     st.sidebar.title(f"User: {st.session_state.get('user','Guest')}")
     st.sidebar.markdown(f"Role: {st.session_state.get('role','N/A')}")
-    if st.sidebar.button("Logout"):
+    if st.sidebar.button("Logout", key="logout_button"):
         st.session_state.clear()
         st.rerun()
 
@@ -125,8 +127,8 @@ def check_in(member_df, log_df):
     st.header("Member Check-In")
     st.write("Current IST:", get_ist_time().strftime("%Y-%m-%d %H:%M:%S"))
 
-    member_id = st.number_input("Member ID", min_value=1, step=1)
-    if st.button("Record Entry"):
+    member_id = st.number_input("Member ID", min_value=1, step=1, key="checkin_id")
+    if st.button("Record Entry", key="checkin_button"):
         member = member_df[member_df['ID']==member_id]
         if member.empty:
             st.error("Member not found")
@@ -165,13 +167,13 @@ def member_management(member_df):
         else:
             next_id = int(member_df['ID'].max()) + 1
 
-        name = st.text_input("Full Name")
-        phone = st.text_input("Phone Number")
-        mtype = st.selectbox("Membership Type", ['Monthly', 'Quarterly', 'Annual', 'Trial'])
-        join = st.date_input("Join Date", get_ist_time().date())
-        expiry = st.date_input("Expiry Date", join + datetime.timedelta(days=30))
+        name = st.text_input("Full Name", key="member_name")
+        phone = st.text_input("Phone Number", key="member_phone")
+        mtype = st.selectbox("Membership Type", ['Monthly', 'Quarterly', 'Annual', 'Trial'], key="member_type")
+        join = st.date_input("Join Date", get_ist_time().date(), key="member_join")
+        expiry = st.date_input("Expiry Date", join + datetime.timedelta(days=30), key="member_expiry")
         
-        if st.button("Add Member"):
+        if st.button("Add Member", key="add_member_button"):
             if not name or not phone:
                 st.error("All fields are required")
             elif expiry <= join:
